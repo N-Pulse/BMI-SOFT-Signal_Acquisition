@@ -1,48 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-Quick checker for Kraken EMG XDF + PsychoPy log.
-
-- Lists streams in the XDF
-- Finds EMG + marker stream
-- Prints basic stats
-- Plots EMG (full + zoom)
-- Optionally shows the stim log CSV
-
-Change XDF_PATH and STIM_LOG_PATH below.
-"""
-
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-import pyxdf
-import pandas as pd
-
-# ============
-#  CONFIG
-# ============
-
-# 🔁 CHANGE THIS to your actual xdf file path
-XDF_PATH = r"/Users/elodiedong/Desktop/kraken_data/s011/sub-P005_ses-S012_task-Default_run-001_emg_kraken.xdf"
-
-# 🔁 OPTIONAL: set this to your stim log CSV, or to None if you don't want to load it
-STIM_LOG_PATH = r"/Users/elodiedong/Desktop/kraken_data/s011/stim_log_20251129_143144"
-# STIM_LOG_PATH = None
-
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-Quick checker for Kraken EMG XDF + PsychoPy log.
-
-- Lists streams in the XDF
-- Finds EMG + marker stream
-- Prints basic stats
-- Plots EMG (full + zoom) with markers
-- Plots all 6 EMG channels (full + zoom)
-- Optionally shows the stim log CSV
-
-Change XDF_PATH and STIM_LOG_PATH below.
-"""
 
 import os
 import numpy as np
@@ -55,10 +10,10 @@ import pandas as pd
 # ============
 
 # 🔁 CHANGE THIS to the XDF you want to inspect
-XDF_PATH = r"/Users/elodiedong/Desktop/kraken_data/s013/sub-P005_ses-S013_task-Default_run-001_emg_kraken.xdf"
+XDF_PATH = r"/Users/elodiedong/Desktop/kraken_data/P009/s002/sub-P009_ses-S002_task-Default_run-001_emg_kraken.xdf"
 
 # 🔁 OPTIONAL stim log (set to None if you don’t want to load it)
-STIM_LOG_PATH = r"/Users/elodiedong/Desktop/kraken_data/s013/stim_log_20251129_153026"
+STIM_LOG_PATH = r"Users/elodiedong/Desktop/kraken_data/P009/s002/stim_log_20251129_211940"
 # STIM_LOG_PATH = None
 
 
@@ -163,6 +118,9 @@ def main():
         print(f"Any NaNs? {np.isnan(emg_data_1).any()}")
 
     # --- Marker info ---
+    markers_flat = None
+    m_ts = None
+
     if marker_stream is not None:
         m_ts = np.asarray(marker_stream["time_stamps"])
         m_data = marker_stream["time_series"]
@@ -172,61 +130,11 @@ def main():
         print(f"Number of markers: {len(markers_flat)}")
         uniq = sorted(set(markers_flat))
         print(f"Unique marker values (up to 20): {uniq[:20]}")
-    else:
-        m_ts = None
-
-    # --- Marker raster plot (timing & codes) ---
-    if marker_stream is not None and len(m_ts) > 0:
-        import matplotlib.pyplot as plt
-
-        t0 = emg_ts[0]  # align marker times to EMG start
-        times_rel = m_ts - t0
-        codes = [int(c) for c in markers_flat]
-
-        # Map each unique code to a separate y-level
-        uniq_codes = sorted(set(codes))
-        code_to_y = {code: i for i, code in enumerate(uniq_codes)}
-        y_vals = [code_to_y[c] for c in codes]
-
-        plt.figure(figsize=(12, 4))
-        plt.scatter(times_rel, y_vals, s=12)
-        plt.yticks(range(len(uniq_codes)), [str(c) for c in uniq_codes])
-        plt.xlabel("Time (s)")
-        plt.ylabel("Marker code")
-        plt.title("Marker raster (codes over time)")
-        plt.tight_layout()
-        plt.show()
-
-
 
     # === PLOTS ===
     if emg_data_1.size >= 2 and emg_ts.size >= 2:
         t0 = emg_ts[0]
         t_rel = emg_ts - t0
-
-        # --- Full recording, channel 1 + markers ---
-        plt.figure(figsize=(12, 4))
-        plt.plot(t_rel, emg_data_1, linewidth=0.5)
-        if m_ts is not None:
-            for t in m_ts:
-                plt.axvline(t - t0, alpha=0.15)
-        plt.xlabel("Time (s)")
-        plt.ylabel("EMG (a.u.)")
-        plt.title("Full EMG recording (channel 1)")
-        plt.tight_layout()
-
-        # --- First 10 s, channel 1 + markers ---
-        plt.figure(figsize=(12, 4))
-        plt.plot(t_rel, emg_data_1, linewidth=0.5)
-        if m_ts is not None:
-            for t in m_ts:
-                if 0 <= (t - t0) <= 10:
-                    plt.axvline(t - t0, alpha=0.5)
-        plt.xlim(0, 10)
-        plt.xlabel("Time (s)")
-        plt.ylabel("EMG (a.u.)")
-        plt.title("EMG + markers (first 10 s)")
-        plt.tight_layout()
 
         # --- All 6 channels: full recording ---
         if emg_data.shape[1] == 6:
@@ -245,22 +153,26 @@ def main():
             plt.xlabel("Time (s)")
             plt.tight_layout()
 
-            # --- All 6 channels: first 10 s ---
-            mask = t_rel <= 10
-            plt.figure(figsize=(14, 10))
-            for ch in range(6):
-                ax = plt.subplot(6, 1, ch + 1)
-                ax.plot(t_rel[mask], emg_data[mask, ch], linewidth=0.5)
-                if m_ts is not None:
-                    for t in m_ts:
-                        if 0 <= (t - t0) <= 10:
-                            ax.axvline(t - t0, alpha=0.3)
-                ax.set_ylabel(f"Ch {ch+1}")
-                if ch == 0:
-                    ax.set_title("All 6 EMG channels (first 10 s)")
-                if ch < 5:
-                    ax.set_xticklabels([])
-            plt.xlabel("Time (s)")
+        # --- Channel 1 + triggers just below (shared x-axis) ---
+        if m_ts is not None and markers_flat is not None and len(m_ts) > 0:
+            codes = [int(c) for c in markers_flat]
+            times_rel_mark = m_ts - t0
+
+            fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12, 6))
+
+            # Top: EMG channel 1
+            ax1.plot(t_rel, emg_data_1, linewidth=0.5)
+            ax1.set_ylabel("EMG Ch1 (a.u.)")
+            ax1.set_title("EMG channel 1 with triggers below")
+
+            # Bottom: marker codes as points over time
+            ax2.scatter(times_rel_mark, codes, s=10)
+            ax2.set_xlabel("Time (s)")
+            ax2.set_ylabel("Marker code")
+
+            # 👉 If you want to zoom on the first 10s, uncomment:
+            # ax1.set_xlim(0, 10)
+
             plt.tight_layout()
 
         plt.show()
